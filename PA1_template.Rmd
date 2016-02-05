@@ -1,25 +1,125 @@
 ---
 title: "Reproducible Research: Peer Assessment 1"
 output: 
-  html_document:
-    keep_md: true
+html_document:
+keep_md: true
 ---
 
 
-## Loading and preprocessing the data
+## Loading and preprocessing the dataun
 
+```{r warning=FALSE, comment=NA, message=FALSE}
+require(dplyr)
+require(ggplot2)
+require(lattice)
+require(data.table)
 
+activity <- read.csv(unz("activity.zip", "activity.csv"))
+activity <- data.table(activity)
+activity <- activity %>% mutate(date=as.Date(date, "%Y-%m-%d"))
+```
 
 ## What is mean total number of steps taken per day?
 
+```{r warning=FALSE, comment=NA, message=FALSE}
 
+dailyMetrics <- activity %>% 
+    group_by(date) %>% 
+    summarise(totalSteps=sum(steps, na.rm = T))
+
+ggplot(dailyMetrics, aes(x=totalSteps)) +
+    xlab("Total Steps") + ylab("Count") +
+    geom_histogram(colour="black", fill="#99CCFF") +
+    theme_bw()
+
+r <- dailyMetrics %>% summarise(meanSteps=mean(totalSteps, na.rm = TRUE), medianSteps=median(totalSteps, na.rm = TRUE))
+
+```
+
+The average number of steps taken per day was `r r$meanSteps`, and the median was `r r$medianStep`.
 
 ## What is the average daily activity pattern?
 
+```{r warning=FALSE, comment=NA, message=FALSE}
 
+intervalMetrics <- activity %>% 
+    group_by(interval) %>% 
+    summarise(meanSteps=mean(steps, na.rm = T))
+
+ggplot(intervalMetrics, aes(interval, meanSteps)) + geom_line() +
+    xlab("Interval") + ylab("Mean Steps") +
+    theme_bw()
+
+maxInterval <- intervalMetrics[meanSteps==max(meanSteps),]
+```
+
+The interval period with the highest mean number of steps was `r maxInterval$interval`, with an mean of `r maxInterval$meanSteps` steps.
 
 ## Imputing missing values
 
+```{r warning=FALSE, comment=NA, message=FALSE}
+missingValuesCount = nrow(activity[is.na(steps),])
 
+replaceNAs <- function(){
+    values <- sapply(1:nrow(activity), function(index){
+        if (is.na(activity[index, steps])){
+            return (intervalMetrics[interval==activity[index, interval], meanSteps])
+            }else{
+                return(activity[index, steps])
+                }
+        })    
+    }
+
+newActivity <- activity %>% mutate(steps=replaceNAs())
+
+newDailyMetrics <- newActivity %>% 
+    group_by(date) %>% 
+    summarise(totalSteps=sum(steps, na.rm = T))
+
+ggplot(newDailyMetrics, aes(x=totalSteps)) +
+    xlab("Total Steps") + ylab("Count") +
+    geom_histogram(colour="black", fill="#99CCFF") +
+    theme_bw()
+
+newR <- newDailyMetrics %>% summarise(meanSteps=mean(totalSteps, na.rm = TRUE), medianSteps=median(totalSteps, na.rm = TRUE))
+
+```
+
+There are a total of `r missingValuesCount` NAs in the data set. To fill in the missing values, the average number of steps for each interval were used.
+
+By imputing the values, the distribution of the data changes. The average number of steps taken per day changes to `r format(newR$meanSteps)`, and the median to `r format(newR$medianStep)`.
+Now, the most frequent average number of steps taken are around 10000 and 11000. The number of days without any activity reduced from 10 to just about 2.
 
 ## Are there differences in activity patterns between weekdays and weekends?
+
+
+```{r warning=FALSE, comment=NA, message=FALSE}
+
+computeWeekday <- function(){
+    weekdays <- sapply(newActivity$date, function(date){
+    
+    if (weekdays(date) %in% c("Saturday", "Sunday")){
+    return("weekend")
+    }else{
+        return("weekday")
+        }
+    })
+    
+    as.factor(weekdays)
+}
+
+newActivity <- newActivity %>% mutate(weekday=computeWeekday())
+
+newIntervalMetrics <- newActivity %>% 
+    group_by(interval, weekday) %>% 
+    summarise(meanSteps=mean(steps, na.rm = T))
+
+xyplot(meanSteps~interval|weekday, 
+       data=newIntervalMetrics,
+       main="Average Number of Steps over Weekdays", 
+       ylab="Number of Steps", xlab="Interval", type="l",
+       layout=c(1,2))
+
+```
+
+Analyzing the patterns of steps during weekdays and weekends it seems that, on average, more steps are taken at each interval during the weekend, although the highest number of steps across all intervals is on weekdays.
